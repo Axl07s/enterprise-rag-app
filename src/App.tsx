@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { 
   ArrowLeft, Send, Database, FileText, Sparkles, ShieldCheck, 
-  Cpu, Sliders, Terminal, X
+  Cpu, Sliders, Terminal, X, AlertTriangle, RefreshCw, Info
 } from 'lucide-react';
 
 interface CitationDetails {
@@ -42,6 +42,9 @@ export function App() {
   // Ingest Simulation State
   const [isIngesting, setIsIngesting] = useState<boolean>(false);
   const [ingestProgress, setIngestProgress] = useState<number>(0);
+  const [ingestError, setIngestError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
+  const [simulationMode, setSimulationMode] = useState<'success' | 'failure'>('success');
 
   const [vaultDocs, setVaultDocs] = useState<VaultDoc[]>([
     { id: '1', name: 'Enterprise_Architecture_Spec_2026.pdf', size: '3.8 MB', tokens: '142,800', chunks: 284, status: 'Indexed', embeddingModel: 'text-embedding-3-large (3072 dims)' },
@@ -54,31 +57,31 @@ export function App() {
     { 
       id: 'init-1',
       role: 'assistant', 
-      text: 'Motor RAG Empresarial inicializado. Conexión activa a PostgreSQL PGVector con indexación HNSW (Hierarchical Navigable Small World). Haga una consulta sobre los documentos corporativos indexados.',
+      text: 'Enterprise RAG Engine initialized. Active connection established to PostgreSQL PGVector with HNSW (Hierarchical Navigable Small World) indexing. Query the indexed corporate knowledge base.',
     },
     {
       id: 'init-2',
       role: 'user',
-      text: '¿Cómo se garantiza la tolerancia a fallos y la resiliencia en los webhooks de Stripe?',
+      text: 'How does the architecture ensure fault tolerance and idempotency across Stripe webhooks?',
     },
     {
       id: 'init-3',
       role: 'assistant',
-      text: 'El sistema implementa un bus de eventos idempotente con almacenamiento intermedio en Redis y reintentos exponenciales automáticos de hasta 72 horas. Cada evento entrante se valida con la firma criptográfica HMAC-SHA256 antes de procesar cualquier mutación en el balance.',
+      text: 'The architecture implements an idempotent event bus with Redis streaming cache and exponential backoff retry policies up to 72 hours. Every inbound event is cryptographically verified via HMAC-SHA256 signatures before triggering ledger mutations.',
       citation: {
         docName: 'Stripe_Billing_Webhook_Recovery.md',
-        section: '§ 4.2 Arquitectura Idempotente de Reintentos',
+        section: '§ 4.2 Idempotent Retry Architecture',
         cosineScore: 0.948,
         chunkId: 'vec_chunk_88a91c',
-        snippet: 'Todos los webhooks entrantes son deserializados y registrados en la tabla webhook_ledger con constraint UNIQUE(stripe_event_id). Si el worker falla, el dispatcher reintenta tras 30s, 2m, 10m y 1h hasta completar el ACK.',
+        snippet: 'All inbound webhooks are deserialized and recorded in the webhook_ledger table with a UNIQUE(stripe_event_id) constraint. If the worker fails, the dispatcher retries after 30s, 2m, 10m, and 1h until full ACK completion.',
       }
     }
   ]);
 
   const presetQueries = [
-    '¿Cuál es la política de tolerancia a fallos en el clúster Kubernetes?',
-    '¿Qué requisitos de cifrado exige SOC2 para tokens en tránsito?',
-    '¿Cómo maneja Stripe los fallos de reintento en webhooks de facturación?',
+    'What is the fault tolerance policy in the Kubernetes cluster?',
+    'What encryption requirements does SOC2 mandate for tokens in transit?',
+    'How does Stripe handle webhook retry failures for billing events?',
   ];
 
   const handleSendQuery = (textToSend?: string) => {
@@ -94,32 +97,65 @@ export function App() {
       let reply = '';
       let citation: CitationDetails | undefined;
 
-      if (query.toLowerCase().includes('kubernetes') || query.toLowerCase().includes('fallos')) {
-        reply = 'El clúster Kubernetes opera con un PodDisruptionBudget de minAvailable: 2 réplicas a través de 3 Availability Zones aisladas. Las sondas de liveness y readiness están calibradas con umbral de fallo de 3 reintentos consecutivos antes de drenar el pod.';
-        citation = {
-          docName: 'Enterprise_Architecture_Spec_2026.pdf',
-          section: '§ 7.1 Alta Disponibilidad & Tolerancia Multi-AZ',
-          cosineScore: 0.932,
-          chunkId: 'vec_chunk_32f01d',
-          snippet: 'La configuración de ingress de Envoy redirige automáticamente el tráfico ante degradación de latencia >200ms en cualquiera de los nodos secundarios.',
-        };
-      } else if (query.toLowerCase().includes('soc2') || query.toLowerCase().includes('cifrado')) {
-        reply = 'Bajo el control SOC2 CC6.1, todos los datos en tránsito deben forzar TLS 1.3 con suites de cifrado ECDHE-RSA-AES128-GCM-SHA256. Queda estrictamente prohibido el uso de certificados autofirmados en entornos accesibles por red.';
-        citation = {
-          docName: 'SOC2_Type_II_Security_Controls.docx',
-          section: '§ 3.4 Cifrado de Canales y Gestión de Claves',
-          cosineScore: 0.961,
-          chunkId: 'vec_chunk_94d21e',
-          snippet: 'Todas las claves privadas residen en HSM FIPS 140-2 Nivel 3 con rotación programada cada 90 días naturales.',
-        };
+      const q = query.toLowerCase();
+
+      // Determine matching document chunk and raw similarity score
+      let candidateDoc = '';
+      let candidateSection = '';
+      let candidateSnippet = '';
+      let candidateChunkId = '';
+      let rawCosine = 0.925;
+      let detailedReply = '';
+
+      if (q.includes('stripe') || q.includes('webhook') || q.includes('billing')) {
+        candidateDoc = 'Stripe_Billing_Webhook_Recovery.md';
+        candidateSection = '§ 4.2 Idempotent Retry Architecture & DLQ Routing';
+        candidateSnippet = 'All inbound webhooks are deserialized and recorded in the webhook_ledger table with a UNIQUE(stripe_event_id) constraint. If worker processing exhausts 5 exponential retries (up to 72 hours), the unacknowledged payload is automatically routed to a dead-letter queue (DLQ) with an urgent PagerDuty alert.';
+        candidateChunkId = 'vec_chunk_88a91c';
+        rawCosine = 0.948;
+        detailedReply = 'Stripe webhook retry failures are mitigated via an idempotent ledger table storing unique event IDs. When transient network timeouts or 5xx worker exceptions occur, the dispatcher triggers exponential backoff retries at 30s, 2m, 10m, and 1h intervals for up to 72 hours. Persistent failures are automatically isolated into an encrypted dead-letter queue (DLQ) with telemetry alerts.';
+      } else if (q.includes('kubernetes') || q.includes('k8s') || q.includes('cluster') || q.includes('fault')) {
+        candidateDoc = 'Enterprise_Architecture_Spec_2026.pdf';
+        candidateSection = '§ 7.1 High Availability & Multi-AZ Fault Tolerance';
+        candidateSnippet = 'The Kubernetes cluster operates with a PodDisruptionBudget of minAvailable: 2 replicas across 3 isolated Availability Zones. Envoy ingress configuration automatically sheds traffic upon latency degradation >200ms across secondary downstream nodes.';
+        candidateChunkId = 'vec_chunk_32f01d';
+        rawCosine = 0.932;
+        detailedReply = 'The Kubernetes cluster enforces high availability through a PodDisruptionBudget maintaining minAvailable: 2 replicas across 3 isolated Availability Zones. Liveness and readiness probes trigger pod drain and restart after 3 consecutive failed checks, while Envoy ingress automatically reroutes traffic away from degraded pods.';
+      } else if (q.includes('soc2') || q.includes('encrypt') || q.includes('token') || q.includes('security')) {
+        candidateDoc = 'SOC2_Type_II_Security_Controls.docx';
+        candidateSection = '§ 3.4 Transport Encryption & Key Management';
+        candidateSnippet = 'All data in transit must enforce TLS 1.3 with ECDHE-RSA-AES128-GCM-SHA256 cipher suites. Private signing keys reside inside FIPS 140-2 Level 3 Hardware Security Modules (HSMs) with scheduled 90-day automatic rotation.';
+        candidateChunkId = 'vec_chunk_94d21e';
+        rawCosine = 0.961;
+        detailedReply = 'Under SOC2 Type II CC6.1 controls, all session tokens and API payloads in transit mandate TLS 1.3 with ECDHE-RSA-AES128-GCM-SHA256 cipher suites. Asymmetric keys reside in dedicated FIPS 140-2 Level 3 Hardware Security Modules (HSMs) with automated 90-day key rotations and immutable audit logging.';
+      } else if (q.includes('hipaa') || q.includes('privacy') || q.includes('phi') || q.includes('health')) {
+        candidateDoc = 'HIPAA_Compliance_Privacy_Rules.pdf';
+        candidateSection = '§ 2.8 Protected Health Information (PHI) Access Boundaries';
+        candidateSnippet = 'All ePHI data at rest is encrypted using AES-256 with tenant-isolated KMS keys. Role-based access control (RBAC) enforces principle of least privilege, requiring audit log generation for every single read operation on sensitive patient records.';
+        candidateChunkId = 'vec_chunk_61b84f';
+        rawCosine = 0.918;
+        detailedReply = 'HIPAA security mandates field-level AES-256 encryption with per-tenant KMS keys for all Protected Health Information (PHI). Zero-trust access controls enforce ephemeral access tokens, requiring synchronous audit trail generation and automatic session termination after 15 minutes of inactivity.';
       } else {
-        reply = `Respuesta fundamentada mediante búsqueda de similitud PGVector (${(minCosine + 0.08).toFixed(3)} Cosine) en base de conocimiento enterprise. Cero inferencias no respaldadas por documentos.`;
+        candidateDoc = 'Enterprise_Architecture_Spec_2026.pdf';
+        candidateSection = '§ 1.2 Data Integrity & Provenance Principles';
+        candidateSnippet = 'The RAG architecture utilizes PostgreSQL PGVector with HNSW indexing (m=16, ef_construction=64) over OpenAI text-embedding-3-large embeddings (3072 dimensions). Sampling temperature is locked to 0.0 to neutralize heuristic hallucinations and enforce deterministic retrieval.';
+        candidateChunkId = 'vec_chunk_77e43b';
+        rawCosine = 0.885;
+        detailedReply = `According to § 1.2 of the Enterprise Architecture Specification, the retrieval pipeline leverages PostgreSQL PGVector with HNSW indexing over 3072-dimensional embeddings. Sampling temperature is strictly locked to 0.0, guaranteeing deterministic retrieval without generative extrapolation.`;
+      }
+
+      // Check Guardrail Threshold
+      if (strictAntiHallucination && rawCosine < minCosine) {
+        reply = `[GUARDRAIL TRIGGERED]: Semantic similarity score (${rawCosine.toFixed(3)}) fell below the active threshold (${minCosine.toFixed(2)}). Query execution was halted to prevent speculative generation or unverified extrapolation.`;
+        citation = undefined;
+      } else {
+        reply = detailedReply;
         citation = {
-          docName: 'Enterprise_Architecture_Spec_2026.pdf',
-          section: '§ 1.2 Principios de Integridad de Datos',
-          cosineScore: 0.914,
-          chunkId: 'vec_chunk_77e43b',
-          snippet: 'El modelo RAG tiene restringida la temperatura a 0.0 para neutralizar alucinaciones heurísticas.',
+          docName: candidateDoc,
+          section: candidateSection,
+          cosineScore: rawCosine,
+          chunkId: candidateChunkId,
+          snippet: candidateSnippet,
         };
       }
 
@@ -130,25 +166,47 @@ export function App() {
     }, 700);
   };
 
-  const handleSimulateIngest = () => {
+  const handleSimulateIngest = (modeOverride?: 'success' | 'failure') => {
+    const targetMode = modeOverride || simulationMode;
     setIsIngesting(true);
+    setIngestError(null);
     setIngestProgress(15);
-    setTimeout(() => setIngestProgress(55), 600);
-    setTimeout(() => setIngestProgress(85), 1200);
+
+    setTimeout(() => setIngestProgress(45), 500);
+
+    if (targetMode === 'failure') {
+      setTimeout(() => setIngestProgress(68), 1000);
+      setTimeout(() => {
+        setIsIngesting(false);
+        setIngestError('Ingestion Pipeline Exception: PDF Chunking failed at page 42 (Unparseable OCR byte stream). Retry scheduled via DLQ.');
+      }, 1500);
+    } else {
+      setTimeout(() => setIngestProgress(85), 1100);
+      setTimeout(() => {
+        setIngestProgress(100);
+        setIsIngesting(false);
+        const newDoc: VaultDoc = {
+          id: Date.now().toString(),
+          name: 'Enterprise_Security_Runbook_2026.pdf',
+          size: '1.9 MB',
+          tokens: '45,200',
+          chunks: 92,
+          status: 'Indexed',
+          embeddingModel: 'text-embedding-3-large (3072 dims)',
+        };
+        setVaultDocs(prev => [newDoc, ...prev]);
+      }, 1600);
+    }
+  };
+
+  const handleRetryPipeline = () => {
+    setIsRetrying(true);
     setTimeout(() => {
-      setIngestProgress(100);
-      setIsIngesting(false);
-      const newDoc: VaultDoc = {
-        id: Date.now().toString(),
-        name: 'Nuevo_Manual_Operaciones_2026.pdf',
-        size: '1.9 MB',
-        tokens: '45,200',
-        chunks: 92,
-        status: 'Indexed',
-        embeddingModel: 'text-embedding-3-large (3072 dims)',
-      };
-      setVaultDocs(prev => [newDoc, ...prev]);
-    }, 1800);
+      setIsRetrying(false);
+      setIngestError(null);
+      setSimulationMode('success');
+      handleSimulateIngest('success');
+    }, 1200);
   };
 
   return (
@@ -161,7 +219,7 @@ export function App() {
           className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition-all shadow-sm"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Volver al Portafolio Maestro</span>
+          <span>Return to Master Portfolio</span>
         </button>
 
         <div className="flex items-center gap-2 text-xs font-mono">
@@ -189,9 +247,9 @@ export function App() {
           {/* Navigation Tabs */}
           <nav className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-2xl border border-zinc-800 text-xs font-medium">
             {[
-              { id: 'chat', label: 'Playground RAG' },
-              { id: 'vault', label: 'Bóveda de Documentos' },
-              { id: 'guardrails', label: 'Parámetros & Guardrails' },
+              { id: 'chat', label: 'RAG Playground' },
+              { id: 'vault', label: 'Knowledge Vault' },
+              { id: 'guardrails', label: 'Guardrails & Parameters' },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -224,9 +282,14 @@ export function App() {
               <div className="px-6 py-3.5 bg-zinc-950/80 border-b border-zinc-800 flex items-center justify-between text-xs font-mono">
                 <div className="flex items-center gap-2 text-zinc-300">
                   <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Canal Anti-Alucinación Activo (Temp: 0.0)</span>
+                  <span>Anti-Hallucination Pipeline Active (Temp: 0.0)</span>
                 </div>
-                <span className="text-[11px] text-zinc-500">Umbral Coseno: &gt;{minCosine}</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-zinc-400">Active Threshold:</span>
+                  <span className="px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    &ge; {minCosine.toFixed(2)} Cosine
+                  </span>
+                </div>
               </div>
 
               {/* Messages Container */}
@@ -239,8 +302,17 @@ export function App() {
                     <div className={`max-w-2xl rounded-2xl p-4 text-xs sm:text-sm leading-relaxed ${
                       m.role === 'user'
                         ? 'bg-indigo-600 text-white shadow-md'
+                        : m.text.startsWith('[GUARDRAIL TRIGGERED]')
+                        ? 'bg-amber-950/40 border border-amber-500/40 text-amber-200'
                         : 'bg-zinc-900 border border-zinc-800 text-zinc-200'
                     }`}>
+                      {m.text.startsWith('[GUARDRAIL TRIGGERED]') && (
+                        <div className="flex items-center gap-2 mb-2 text-amber-400 font-mono font-bold text-xs">
+                          <AlertTriangle className="w-4 h-4 shrink-0" />
+                          <span>Strict Guardrail Intercept</span>
+                        </div>
+                      )}
+                      
                       {m.text}
 
                       {/* Citation Badge */}
@@ -251,10 +323,10 @@ export function App() {
                             className="inline-flex items-center gap-1.5 text-xs font-mono text-emerald-400 hover:text-emerald-300 hover:underline"
                           >
                             <FileText className="w-3.5 h-3.5" />
-                            <span>Fuente: {m.citation.docName}</span>
+                            <span>Source: {m.citation.docName}</span>
                           </button>
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                            Coseno: {m.citation.cosineScore}
+                            Cosine: {m.citation.cosineScore.toFixed(3)}
                           </span>
                         </div>
                       )}
@@ -284,7 +356,7 @@ export function App() {
                 >
                   <input
                     type="text"
-                    placeholder="Escriba su consulta técnica sobre los documentos indexados..."
+                    placeholder="Enter technical query across indexed enterprise documentation..."
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     className="flex-1 bg-zinc-900 border border-zinc-800 text-white rounded-xl px-4 py-3 text-xs sm:text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -293,7 +365,7 @@ export function App() {
                     type="submit"
                     className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase transition-all flex items-center gap-2 shadow-lg"
                   >
-                    <span>Consultar</span>
+                    <span>Query</span>
                     <Send className="w-3.5 h-3.5" />
                   </button>
                 </form>
@@ -310,7 +382,7 @@ export function App() {
                   <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
                     <span className="text-xs font-mono uppercase text-emerald-400 font-bold flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" />
-                      Chunk Fáctico Inspeccionado
+                      Grounded Chunk Inspected
                     </span>
                     <button 
                       onClick={() => setSelectedCitation(null)}
@@ -322,15 +394,15 @@ export function App() {
 
                   <div className="space-y-2 text-xs">
                     <div>
-                      <span className="text-zinc-500 font-mono block text-[10px]">DOCUMENTO MATRIZ:</span>
+                      <span className="text-zinc-500 font-mono block text-[10px]">SOURCE DOCUMENT:</span>
                       <span className="font-bold text-white">{selectedCitation.docName}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-500 font-mono block text-[10px]">SECCIÓN / PÁRRAFO:</span>
+                      <span className="text-zinc-500 font-mono block text-[10px]">SECTION / HEADING:</span>
                       <span className="text-zinc-300 font-mono">{selectedCitation.section}</span>
                     </div>
                     <div>
-                      <span className="text-zinc-500 font-mono block text-[10px]">VECTOR ID:</span>
+                      <span className="text-zinc-500 font-mono block text-[10px]">VECTOR CHUNK ID:</span>
                       <span className="text-indigo-400 font-mono">{selectedCitation.chunkId}</span>
                     </div>
                   </div>
@@ -340,18 +412,18 @@ export function App() {
                   </div>
 
                   <div className="flex justify-between items-center text-[11px] font-mono text-zinc-500 pt-2 border-t border-zinc-800">
-                    <span>Similitud Coseno:</span>
-                    <span className="text-emerald-400 font-bold">{selectedCitation.cosineScore} (Criterio Aprobado)</span>
+                    <span>Cosine Similarity:</span>
+                    <span className="text-emerald-400 font-bold">{selectedCitation.cosineScore.toFixed(3)} (Passed Guardrail)</span>
                   </div>
                 </div>
               ) : (
                 <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800 space-y-4 text-xs">
                   <h3 className="font-bold text-white flex items-center gap-2">
                     <Terminal className="w-4 h-4 text-emerald-400" />
-                    Inspección de Embeddings
+                    Embedding Provenance Inspector
                   </h3>
                   <p className="text-zinc-400 leading-relaxed">
-                    Haga clic en cualquier enlace de "Fuente" dentro de las respuestas del asistente para inspeccionar el fragmento exacto y el score de similitud vectorial utilizado en la inferencia.
+                    Click on any "Source" link within the assistant's responses to inspect the exact document chunk and vector cosine similarity score used in retrieval.
                   </p>
                   <div className="p-3.5 rounded-xl bg-zinc-950 border border-zinc-800 font-mono text-[11px] text-zinc-500">
                     // HNSW Search: Top-K = {topK}<br />
@@ -363,18 +435,18 @@ export function App() {
 
               {/* Quick Knowledge Base Stats */}
               <div className="p-6 rounded-3xl bg-zinc-900/30 border border-zinc-800 space-y-3 text-xs">
-                <span className="text-zinc-400 font-mono uppercase text-[11px] block">Resumen del Almacén Vectorial:</span>
+                <span className="text-zinc-400 font-mono uppercase text-[11px] block">Vector Store Telemetry:</span>
                 <div className="space-y-2 font-mono">
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Documentos Indexados:</span>
-                    <span className="text-white font-bold">{vaultDocs.length} Manuales</span>
+                    <span className="text-zinc-500">Indexed Documents:</span>
+                    <span className="text-white font-bold">{vaultDocs.length} Manuals</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Chunks Totales:</span>
+                    <span className="text-zinc-500">Total Vector Chunks:</span>
                     <span className="text-white font-bold">636 Chunks</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Espacio en PGVector:</span>
+                    <span className="text-zinc-500">PGVector Index Size:</span>
                     <span className="text-emerald-400 font-bold">14.2 MB</span>
                   </div>
                 </div>
@@ -390,25 +462,54 @@ export function App() {
           <div className="space-y-6 animate-fadeIn">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h2 className="text-2xl font-bold text-white tracking-tight">Bóveda de Documentos Indexados</h2>
-                <p className="text-xs text-zinc-400 mt-1">Manuales corporativos procesados y tokenizados para búsqueda semántica.</p>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Enterprise Knowledge Vault</h2>
+                <p className="text-xs text-zinc-400 mt-1">Ingested corporate documentation chunked and tokenized for semantic similarity retrieval.</p>
               </div>
 
-              <button
-                onClick={handleSimulateIngest}
-                disabled={isIngesting}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md"
-              >
-                <Cpu className="w-4 h-4" />
-                <span>{isIngesting ? 'Procesando Embeddings...' : 'Simular Ingesta de Documento'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Simulation Mode Selector */}
+                <div className="flex bg-zinc-900 border border-zinc-800 rounded-full p-1 text-[11px] font-mono">
+                  <button
+                    onClick={() => {
+                      setSimulationMode('success');
+                      setIngestError(null);
+                    }}
+                    className={`px-3 py-1 rounded-full transition-all ${
+                      simulationMode === 'success'
+                        ? 'bg-emerald-600 text-white font-bold'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Simulate Success
+                  </button>
+                  <button
+                    onClick={() => setSimulationMode('failure')}
+                    className={`px-3 py-1 rounded-full transition-all ${
+                      simulationMode === 'failure'
+                        ? 'bg-amber-600 text-white font-bold'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    Simulate Error
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => handleSimulateIngest()}
+                  disabled={isIngesting || isRetrying}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md"
+                >
+                  <Cpu className="w-4 h-4" />
+                  <span>{isIngesting ? 'Processing Embeddings...' : 'Run Ingestion'}</span>
+                </button>
+              </div>
             </div>
 
             {/* Ingest Progress Simulation */}
             {isIngesting && (
               <div className="p-4 rounded-2xl bg-zinc-900 border border-emerald-500/40 space-y-2 text-xs font-mono">
                 <div className="flex justify-between text-emerald-300">
-                  <span>Generando Chunks (500 tokens con overlap de 50) &bull; Vectorizando con OpenAI...</span>
+                  <span>Generating Chunks (500 tokens with 50-token overlap) &bull; Vectorizing with OpenAI...</span>
                   <span>{ingestProgress}%</span>
                 </div>
                 <div className="w-full h-2 bg-zinc-950 rounded-full overflow-hidden">
@@ -417,17 +518,35 @@ export function App() {
               </div>
             )}
 
+            {/* Ingest Error State Banner */}
+            {ingestError && (
+              <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex items-center justify-between gap-4 text-xs font-mono text-amber-200">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                  <span>{ingestError}</span>
+                </div>
+                <button
+                  onClick={handleRetryPipeline}
+                  disabled={isRetrying || isIngesting}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 disabled:opacity-50 text-amber-300 border border-amber-500/30 transition-all shrink-0 font-bold"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRetrying ? 'animate-spin' : ''}`} />
+                  <span>{isRetrying ? 'Retrying...' : 'Retry Pipeline'}</span>
+                </button>
+              </div>
+            )}
+
             {/* Documents Table */}
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/30 overflow-hidden">
               <table className="w-full text-left text-xs font-mono">
                 <thead className="bg-zinc-950 border-b border-zinc-800 text-zinc-500 uppercase text-[11px]">
                   <tr>
-                    <th className="p-4">Documento</th>
-                    <th className="p-4">Tamaño</th>
+                    <th className="p-4">Document</th>
+                    <th className="p-4">Size</th>
                     <th className="p-4">Tokens</th>
                     <th className="p-4">Chunks</th>
-                    <th className="p-4">Modelo Embedding</th>
-                    <th className="p-4 text-right">Estado</th>
+                    <th className="p-4">Embedding Model</th>
+                    <th className="p-4 text-right">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-zinc-800/60">
@@ -458,8 +577,8 @@ export function App() {
         {activeTab === 'guardrails' && (
           <div className="space-y-8 animate-fadeIn max-w-4xl">
             <div>
-              <h2 className="text-2xl font-bold text-white tracking-tight">Parámetros del Pipeline RAG</h2>
-              <p className="text-xs text-zinc-400 mt-1">Calibre la sensibilidad y los filtros anti-alucinación del motor semántico.</p>
+              <h2 className="text-2xl font-bold text-white tracking-tight">RAG Pipeline Parameters & Guardrails</h2>
+              <p className="text-xs text-zinc-400 mt-1">Calibrate similarity sensitivity and zero-hallucination guardrails across the semantic engine.</p>
             </div>
 
             <div className="p-8 rounded-3xl bg-zinc-900/40 border border-zinc-800 space-y-8">
@@ -469,7 +588,7 @@ export function App() {
                 <div className="flex justify-between items-center text-xs font-mono">
                   <label className="text-zinc-300 font-bold uppercase flex items-center gap-2">
                     <Sliders className="w-4 h-4 text-emerald-400" />
-                    Umbral Mínimo de Similitud Coseno (Min Score)
+                    Minimum Cosine Similarity Threshold (Min Score)
                   </label>
                   <span className="text-emerald-400 font-bold text-base">{minCosine}</span>
                 </div>
@@ -483,7 +602,7 @@ export function App() {
                   className="w-full accent-emerald-500 h-2 bg-zinc-800 rounded-lg cursor-pointer"
                 />
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  Cualquier chunk con un score menor a {minCosine} será descartado de forma estricta. Valores más altos garantizan mayor precisión fáctica.
+                  Any vector chunk scoring below {minCosine} is discarded. Higher thresholds enforce strict factual grounding.
                 </p>
               </div>
 
@@ -492,7 +611,7 @@ export function App() {
                 <div className="flex justify-between items-center text-xs font-mono">
                   <label className="text-zinc-300 font-bold uppercase flex items-center gap-2">
                     <Sliders className="w-4 h-4 text-emerald-400" />
-                    Máximo de Chunks Recuperados (Top-K)
+                    Max Retrieved Context Chunks (Top-K)
                   </label>
                   <span className="text-emerald-400 font-bold text-base">{topK} Chunks</span>
                 </div>
@@ -506,15 +625,15 @@ export function App() {
                   className="w-full accent-emerald-500 h-2 bg-zinc-800 rounded-lg cursor-pointer"
                 />
                 <p className="text-[11px] text-zinc-500 leading-relaxed">
-                  Número de fragmentos contextuales inyectados en el prompt final del LLM.
+                  Number of top-ranked context fragments injected into the final LLM prompt context window.
                 </p>
               </div>
 
               {/* Toggle: Strict Hallucination */}
               <div className="pt-4 border-t border-zinc-800 flex items-center justify-between">
                 <div>
-                  <h4 className="text-sm font-bold text-white">Guardrail Anti-Alucinación Estricto</h4>
-                  <p className="text-xs text-zinc-400">Si ningún chunk supera el umbral de similitud, rechazar la respuesta en lugar de conjeturar.</p>
+                  <h4 className="text-sm font-bold text-white">Strict Anti-Hallucination Guardrail</h4>
+                  <p className="text-xs text-zinc-400">If no chunks exceed the similarity threshold, refuse speculative generation rather than guessing.</p>
                 </div>
                 <button
                   type="button"
@@ -526,6 +645,38 @@ export function App() {
                   <div className={`w-5 h-5 rounded-full bg-white transition-transform ${
                     strictAntiHallucination ? 'translate-x-6' : 'translate-x-0.5'
                   }`} />
+                </button>
+              </div>
+
+              {/* Live Guardrail Impact Telemetry */}
+              <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs font-mono">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Info className="w-4 h-4 text-emerald-400" />
+                    <span className="text-zinc-200 font-semibold">Live Guardrail Filter Analysis:</span>
+                  </div>
+                  <div className="text-[11px] text-zinc-400 pl-6">
+                    {minCosine >= 0.94 ? (
+                      <span className="text-amber-400 font-bold">
+                        High selectivity (&gt;0.94): ~85% of general chunks filtered. Only exact high-cosine matches allowed.
+                      </span>
+                    ) : minCosine >= 0.85 ? (
+                      <span className="text-emerald-400">
+                        Balanced enterprise precision (0.85-0.93): Filters out ambiguous noise while preserving relevant facts.
+                      </span>
+                    ) : (
+                      <span className="text-indigo-400">
+                        High recall (&lt;0.85): Maximum document coverage with permissive relevance boundary.
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  className="px-4 py-2 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 hover:text-white font-mono text-[11px] transition-all shrink-0 self-start sm:self-auto"
+                >
+                  Test in Playground &rarr;
                 </button>
               </div>
 
