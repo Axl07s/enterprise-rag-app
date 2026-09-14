@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { 
-  ArrowLeft, Send, Database, FileText, Sparkles, ShieldCheck, 
+  Send, Database, FileText, Sparkles, ShieldCheck, 
   Cpu, Sliders, Terminal, X, AlertTriangle, RefreshCw, Info
 } from 'lucide-react';
 
