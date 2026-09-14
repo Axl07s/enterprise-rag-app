@@ -40,13 +40,6 @@ export function App() {
     return 'en';
   });
 
-  const setLang = (newLang: Language) => {
-    setLangState(newLang);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('rag_lang', newLang);
-    }
-  };
-
   const t = translations[lang];
   const [activeTab, setActiveTab] = useState<'chat' | 'vault' | 'guardrails'>('chat');
   const [input, setInput] = useState('');
@@ -71,32 +64,54 @@ export function App() {
     { id: '4', name: 'HIPAA_Compliance_Privacy_Rules.pdf', size: '2.1 MB', tokens: '89,500', chunks: 176, status: 'Indexed', embeddingModel: 'text-embedding-3-large (3072 dims)' },
   ]);
 
-  const [messages, setMessages] = useState<Message[]>([
+  const getInitialMessages = (l: Language): Message[] => [
     { 
       id: 'init-1',
       role: 'assistant', 
-      text: 'Enterprise RAG Engine initialized. Active connection established to PostgreSQL PGVector with HNSW (Hierarchical Navigable Small World) indexing. Query the indexed corporate knowledge base.',
+      text: l === 'es'
+        ? 'Motor RAG Empresarial inicializado. Conexión activa establecida con PostgreSQL PGVector con indexación HNSW (Hierarchical Navigable Small World). Haga una consulta sobre los documentos corporativos indexados.'
+        : 'Enterprise RAG Engine initialized. Active connection established to PostgreSQL PGVector with HNSW (Hierarchical Navigable Small World) indexing. Query the indexed corporate knowledge base.',
     },
     {
       id: 'init-2',
       role: 'user',
-      text: 'How does the architecture ensure fault tolerance and idempotency across Stripe webhooks?',
+      text: l === 'es'
+        ? '¿Cómo se garantiza la tolerancia a fallos y la idempotencia en los webhooks de Stripe?'
+        : 'How does the architecture ensure fault tolerance and idempotency across Stripe webhooks?',
     },
     {
       id: 'init-3',
       role: 'assistant',
-      text: 'The architecture implements an idempotent event bus with Redis streaming cache and exponential backoff retry policies up to 72 hours. Every inbound event is cryptographically verified via HMAC-SHA256 signatures before triggering ledger mutations.',
+      text: l === 'es'
+        ? 'El sistema implementa un bus de eventos idempotente con almacenamiento intermedio en Redis y reintentos exponenciales automáticos de hasta 72 horas. Cada evento entrante se valida con la firma criptográfica HMAC-SHA256 antes de mutar el libro mayor.'
+        : 'The architecture implements an idempotent event bus with Redis streaming cache and exponential backoff retry policies up to 72 hours. Every inbound event is cryptographically verified via HMAC-SHA256 signatures before triggering ledger mutations.',
       citation: {
         docName: 'Stripe_Billing_Webhook_Recovery.md',
-        section: '§ 4.2 Idempotent Retry Architecture',
+        section: l === 'es' ? '§ 4.2 Arquitectura de Reintentos Idempotentes' : '§ 4.2 Idempotent Retry Architecture',
         cosineScore: 0.948,
         chunkId: 'vec_chunk_88a91c',
-        snippet: 'All inbound webhooks are deserialized and recorded in the webhook_ledger table with a UNIQUE(stripe_event_id) constraint. If the worker fails, the dispatcher retries after 30s, 2m, 10m, and 1h until full ACK completion.',
+        snippet: l === 'es'
+          ? 'Todos los webhooks entrantes se deserializan y registran en la tabla webhook_ledger con una restricción UNIQUE(stripe_event_id). Si el worker falla, se reintenta automáticamente con backoff exponencial.'
+          : 'All inbound webhooks are deserialized and recorded in the webhook_ledger table with a UNIQUE(stripe_event_id) constraint. If the worker fails, the dispatcher retries after 30s, 2m, 10m, and 1h until full ACK completion.',
       }
     }
-  ]);
+  ];
 
-  const presetQueries = [
+  const [messages, setMessages] = useState<Message[]>(() => getInitialMessages(lang));
+
+  const setLang = (newLang: Language) => {
+    setLangState(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('rag_lang', newLang);
+    }
+    setMessages(getInitialMessages(newLang));
+  };
+
+  const presetQueries = lang === 'es' ? [
+    '¿Cuál es la política de tolerancia a fallos en el clúster de Kubernetes?',
+    '¿Qué requisitos de cifrado exige SOC2 para tokens en tránsito?',
+    '¿Cómo gestiona Stripe los fallos de reintento en webhooks de facturación?',
+  ] : [
     'What is the fault tolerance policy in the Kubernetes cluster?',
     'What encryption requirements does SOC2 mandate for tokens in transit?',
     'How does Stripe handle webhook retry failures for billing events?',
@@ -125,41 +140,61 @@ export function App() {
       let rawCosine = 0.925;
       let detailedReply = '';
 
-      if (q.includes('stripe') || q.includes('webhook') || q.includes('billing')) {
+      if (q.includes('stripe') || q.includes('webhook') || q.includes('billing') || q.includes('factura')) {
         candidateDoc = 'Stripe_Billing_Webhook_Recovery.md';
-        candidateSection = '§ 4.2 Idempotent Retry Architecture & DLQ Routing';
-        candidateSnippet = 'All inbound webhooks are deserialized and recorded in the webhook_ledger table with a UNIQUE(stripe_event_id) constraint. If worker processing exhausts 5 exponential retries (up to 72 hours), the unacknowledged payload is automatically routed to a dead-letter queue (DLQ) with an urgent PagerDuty alert.';
+        candidateSection = lang === 'es' ? '§ 4.2 Arquitectura Idempotente y Enrutamiento DLQ' : '§ 4.2 Idempotent Retry Architecture & DLQ Routing';
+        candidateSnippet = lang === 'es' 
+          ? 'Todos los webhooks entrantes se registran en webhook_ledger con restricción UNIQUE(stripe_event_id). Tras 5 reintentos fallidos, la carga se desvía a la cola de mensajes muertos (DLQ) con alerta urgente a PagerDuty.'
+          : 'All inbound webhooks are deserialized and recorded in the webhook_ledger table with a UNIQUE(stripe_event_id) constraint. If worker processing exhausts 5 exponential retries (up to 72 hours), the unacknowledged payload is automatically routed to a dead-letter queue (DLQ) with an urgent PagerDuty alert.';
         candidateChunkId = 'vec_chunk_88a91c';
         rawCosine = 0.948;
-        detailedReply = 'Stripe webhook retry failures are mitigated via an idempotent ledger table storing unique event IDs. When transient network timeouts or 5xx worker exceptions occur, the dispatcher triggers exponential backoff retries at 30s, 2m, 10m, and 1h intervals for up to 72 hours. Persistent failures are automatically isolated into an encrypted dead-letter queue (DLQ) with telemetry alerts.';
-      } else if (q.includes('kubernetes') || q.includes('k8s') || q.includes('cluster') || q.includes('fault')) {
+        detailedReply = lang === 'es'
+          ? 'Los fallos en webhooks de Stripe se mitigan con una tabla idempotente que almacena los IDs únicos de evento. Ante caídas de red o errores 5xx, se activan reintentos exponenciales a los 30s, 2m, 10m y 1h hasta por 72h. Las excepciones persistentes se aíslan en una Dead-Letter Queue (DLQ) cifrada con alertas de telemetría.'
+          : 'Stripe webhook retry failures are mitigated via an idempotent ledger table storing unique event IDs. When transient network timeouts or 5xx worker exceptions occur, the dispatcher triggers exponential backoff retries at 30s, 2m, 10m, and 1h intervals for up to 72 hours. Persistent failures are automatically isolated into an encrypted dead-letter queue (DLQ) with telemetry alerts.';
+      } else if (q.includes('kubernetes') || q.includes('k8s') || q.includes('cluster') || q.includes('fallo') || q.includes('toleran')) {
         candidateDoc = 'Enterprise_Architecture_Spec_2026.pdf';
-        candidateSection = '§ 7.1 High Availability & Multi-AZ Fault Tolerance';
-        candidateSnippet = 'The Kubernetes cluster operates with a PodDisruptionBudget of minAvailable: 2 replicas across 3 isolated Availability Zones. Envoy ingress configuration automatically sheds traffic upon latency degradation >200ms across secondary downstream nodes.';
+        candidateSection = lang === 'es' ? '§ 7.1 Alta Disponibilidad y Tolerancia Multi-AZ' : '§ 7.1 High Availability & Multi-AZ Fault Tolerance';
+        candidateSnippet = lang === 'es'
+          ? 'El clúster de Kubernetes opera con un PodDisruptionBudget de minAvailable: 2 réplicas en 3 Zonas de Disponibilidad aisladas. Envoy ingress drena tráfico automáticamente si la latencia supera los 200ms.'
+          : 'The Kubernetes cluster operates with a PodDisruptionBudget of minAvailable: 2 replicas across 3 isolated Availability Zones. Envoy ingress configuration automatically sheds traffic upon latency degradation >200ms across secondary downstream nodes.';
         candidateChunkId = 'vec_chunk_32f01d';
         rawCosine = 0.932;
-        detailedReply = 'The Kubernetes cluster enforces high availability through a PodDisruptionBudget maintaining minAvailable: 2 replicas across 3 isolated Availability Zones. Liveness and readiness probes trigger pod drain and restart after 3 consecutive failed checks, while Envoy ingress automatically reroutes traffic away from degraded pods.';
-      } else if (q.includes('soc2') || q.includes('encrypt') || q.includes('token') || q.includes('security')) {
+        detailedReply = lang === 'es'
+          ? 'El clúster de Kubernetes garantiza alta disponibilidad mediante PodDisruptionBudget con mínimo 2 réplicas activas en 3 Zonas de Disponibilidad (AZ). Las sondas de liveness y readiness reinician pods degradados tras 3 fallos consecutivos, mientras Envoy redirige el tráfico sin pérdida de paquetes.'
+          : 'The Kubernetes cluster enforces high availability through a PodDisruptionBudget maintaining minAvailable: 2 replicas across 3 isolated Availability Zones. Liveness and readiness probes trigger pod drain and restart after 3 consecutive failed checks, while Envoy ingress automatically reroutes traffic away from degraded pods.';
+      } else if (q.includes('soc2') || q.includes('encrypt') || q.includes('cifra') || q.includes('token') || q.includes('secur') || q.includes('segurid')) {
         candidateDoc = 'SOC2_Type_II_Security_Controls.docx';
-        candidateSection = '§ 3.4 Transport Encryption & Key Management';
-        candidateSnippet = 'All data in transit must enforce TLS 1.3 with ECDHE-RSA-AES128-GCM-SHA256 cipher suites. Private signing keys reside inside FIPS 140-2 Level 3 Hardware Security Modules (HSMs) with scheduled 90-day automatic rotation.';
+        candidateSection = lang === 'es' ? '§ 3.4 Cifrado en Tránsito y Gestión de Llaves' : '§ 3.4 Transport Encryption & Key Management';
+        candidateSnippet = lang === 'es'
+          ? 'Todos los datos en tránsito exigen TLS 1.3 con suites ECDHE-RSA-AES128-GCM-SHA256. Las llaves privadas residen en módulos HSM certificados FIPS 140-2 Nivel 3 con rotación automática a 90 días.'
+          : 'All data in transit must enforce TLS 1.3 with ECDHE-RSA-AES128-GCM-SHA256 cipher suites. Private signing keys reside inside FIPS 140-2 Level 3 Hardware Security Modules (HSMs) with scheduled 90-day automatic rotation.';
         candidateChunkId = 'vec_chunk_94d21e';
         rawCosine = 0.961;
-        detailedReply = 'Under SOC2 Type II CC6.1 controls, all session tokens and API payloads in transit mandate TLS 1.3 with ECDHE-RSA-AES128-GCM-SHA256 cipher suites. Asymmetric keys reside in dedicated FIPS 140-2 Level 3 Hardware Security Modules (HSMs) with automated 90-day key rotations and immutable audit logging.';
-      } else if (q.includes('hipaa') || q.includes('privacy') || q.includes('phi') || q.includes('health')) {
+        detailedReply = lang === 'es'
+          ? 'Bajo controles SOC2 Tipo II CC6.1, todos los tokens y payloads en tránsito obligan el uso de TLS 1.3 con suites criptográficas robustas. Las llaves asimétricas residen en módulos de hardware HSM FIPS 140-2 Nivel 3 con rotación automática cada 90 días y registros de auditoría inmutables.'
+          : 'Under SOC2 Type II CC6.1 controls, all session tokens and API payloads in transit mandate TLS 1.3 with ECDHE-RSA-AES128-GCM-SHA256 cipher suites. Asymmetric keys reside in dedicated FIPS 140-2 Level 3 Hardware Security Modules (HSMs) with automated 90-day key rotations and immutable audit logging.';
+      } else if (q.includes('hipaa') || q.includes('privacy') || q.includes('phi') || q.includes('health') || q.includes('privacidad') || q.includes('salud')) {
         candidateDoc = 'HIPAA_Compliance_Privacy_Rules.pdf';
-        candidateSection = '§ 2.8 Protected Health Information (PHI) Access Boundaries';
-        candidateSnippet = 'All ePHI data at rest is encrypted using AES-256 with tenant-isolated KMS keys. Role-based access control (RBAC) enforces principle of least privilege, requiring audit log generation for every single read operation on sensitive patient records.';
+        candidateSection = lang === 'es' ? '§ 2.8 Límites de Acceso a Información de Salud Protegida (PHI)' : '§ 2.8 Protected Health Information (PHI) Access Boundaries';
+        candidateSnippet = lang === 'es'
+          ? 'Todos los datos ePHI en reposo se cifran con AES-256 mediante llaves KMS aisladas por tenant. El control de acceso basado en roles (RBAC) genera logs de auditoría sincrónicos para cada lectura.'
+          : 'All ePHI data at rest is encrypted using AES-256 with tenant-isolated KMS keys. Role-based access control (RBAC) enforces principle of least privilege, requiring audit log generation for every single read operation on sensitive patient records.';
         candidateChunkId = 'vec_chunk_61b84f';
         rawCosine = 0.918;
-        detailedReply = 'HIPAA security mandates field-level AES-256 encryption with per-tenant KMS keys for all Protected Health Information (PHI). Zero-trust access controls enforce ephemeral access tokens, requiring synchronous audit trail generation and automatic session termination after 15 minutes of inactivity.';
+        detailedReply = lang === 'es'
+          ? 'La normativa HIPAA exige cifrado AES-256 a nivel de campo con llaves KMS dedicadas por cada cliente. El modelo Zero-Trust emite tokens efímeros y genera trazas de auditoría sincrónicas con expiración automática de sesión tras 15 minutos de inactividad.'
+          : 'HIPAA security mandates field-level AES-256 encryption with per-tenant KMS keys for all Protected Health Information (PHI). Zero-trust access controls enforce ephemeral access tokens, requiring synchronous audit trail generation and automatic session termination after 15 minutes of inactivity.';
       } else {
         candidateDoc = 'Enterprise_Architecture_Spec_2026.pdf';
-        candidateSection = '§ 1.2 Data Integrity & Provenance Principles';
-        candidateSnippet = 'The RAG architecture utilizes PostgreSQL PGVector with HNSW indexing (m=16, ef_construction=64) over OpenAI text-embedding-3-large embeddings (3072 dimensions). Sampling temperature is locked to 0.0 to neutralize heuristic hallucinations and enforce deterministic retrieval.';
+        candidateSection = lang === 'es' ? '§ 1.2 Principios de Integridad y Procedencia' : '§ 1.2 Data Integrity & Provenance Principles';
+        candidateSnippet = lang === 'es'
+          ? 'La arquitectura RAG utiliza PostgreSQL PGVector con indexación HNSW (m=16, ef_construction=64) sobre embeddings text-embedding-3-large (3072 dimensiones). La temperatura se fija en 0.0 para neutralizar alucinaciones.'
+          : 'The RAG architecture utilizes PostgreSQL PGVector with HNSW indexing (m=16, ef_construction=64) over OpenAI text-embedding-3-large embeddings (3072 dimensions). Sampling temperature is locked to 0.0 to neutralize heuristic hallucinations and enforce deterministic retrieval.';
         candidateChunkId = 'vec_chunk_77e43b';
         rawCosine = 0.885;
-        detailedReply = `According to § 1.2 of the Enterprise Architecture Specification, the retrieval pipeline leverages PostgreSQL PGVector with HNSW indexing over 3072-dimensional embeddings. Sampling temperature is strictly locked to 0.0, guaranteeing deterministic retrieval without generative extrapolation.`;
+        detailedReply = lang === 'es'
+          ? 'Según la especificación de arquitectura corporativa, el pipeline de recuperación utiliza PostgreSQL PGVector con indexación HNSW sobre embeddings de 3072 dimensiones. La temperatura de muestreo está bloqueada en 0.0 para garantizar recuperación determinista sin extrapolación generativa.'
+          : 'According to § 1.2 of the Enterprise Architecture Specification, the retrieval pipeline leverages PostgreSQL PGVector with HNSW indexing over 3072-dimensional embeddings. Sampling temperature is strictly locked to 0.0, guaranteeing deterministic retrieval without generative extrapolation.';
       }
 
       // Check Guardrail Threshold
