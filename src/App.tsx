@@ -212,49 +212,38 @@ export function App() {
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col font-sans selection:bg-emerald-500/30 selection:text-white">
       
-      {/* Top Portfolio Return Bar */}
-      <div className="bg-zinc-900/90 border-b border-zinc-800 px-6 py-2.5 flex items-center justify-between z-40 sticky top-0 backdrop-blur-md">
-        <button
-          onClick={() => window.location.href = "https://portfolio-axel-nine.vercel.app"}
-          className="flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-semibold bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white transition-all shadow-sm"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Return to Master Portfolio</span>
-        </button>
-
-        <div className="flex items-center gap-2 text-xs font-mono">
-          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-zinc-400">PostgreSQL PGVector (HNSW) &bull; Zero-Hallucination Guardrails</span>
-        </div>
-      </div>
-
-      {/* App Header */}
-      <header className="border-b border-zinc-800/80 px-6 py-4 bg-zinc-950/60 backdrop-blur-xl">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      {/* App Header (Clean, Independent SaaS Identity) */}
+      <header className="border-b border-zinc-800/80 px-4 sm:px-6 py-3 bg-zinc-950/80 backdrop-blur-xl sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
           
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-bold text-emerald-400 shadow-lg">
-              <Database className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-extrabold text-lg text-white">Enterprise RAG Engine</span>
-              <span className="text-[10px] font-mono ml-2 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+          <div className="flex items-center justify-between w-full sm:w-auto">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-bold text-emerald-400 shadow-sm">
+                <Database className="w-4 h-4" />
+              </div>
+              <span className="font-extrabold text-base text-white tracking-tight">Enterprise RAG</span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
                 PGVector 3072-dim
               </span>
             </div>
+
+            <div className="flex items-center gap-1.5 sm:hidden">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[10px] font-mono text-zinc-400">Live Engine</span>
+            </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1 bg-zinc-900/90 p-1 rounded-2xl border border-zinc-800 text-xs font-medium">
+          {/* Navigation Tabs - Compact, sleek & mobile-first */}
+          <nav className="w-full sm:w-auto flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 text-xs font-medium overflow-x-auto no-scrollbar">
             {[
-              { id: 'chat', label: 'RAG Playground' },
-              { id: 'vault', label: 'Knowledge Vault' },
-              { id: 'guardrails', label: 'Guardrails & Parameters' },
+              { id: 'chat', label: 'Playground' },
+              { id: 'vault', label: 'Bóveda Docs' },
+              { id: 'guardrails', label: 'Guardrails' },
             ].map(tab => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`px-3.5 py-2 rounded-xl transition-all ${
+                className={`flex-1 sm:flex-none px-3 py-1.5 rounded-lg whitespace-nowrap text-xs transition-all ${
                   activeTab === tab.id
                     ? 'bg-emerald-600 text-white font-semibold shadow-sm'
                     : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
@@ -269,37 +258,37 @@ export function App() {
       </header>
 
       {/* Main Workspace Area */}
-      <main className="flex-1 max-w-7xl mx-auto w-full p-6 sm:p-8 space-y-8">
+      <main className="flex-1 max-w-7xl mx-auto w-full px-3.5 py-4 sm:p-8 space-y-6">
         
         {/* TAB 1: RAG CHAT PLAYGROUND */}
         {activeTab === 'chat' && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start animate-fadeIn">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start animate-fadeIn">
             
             {/* Left Chat Area (8 cols) */}
-            <div className="lg:col-span-8 flex flex-col h-[650px] rounded-3xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-md overflow-hidden shadow-2xl">
+            <div className="lg:col-span-8 flex flex-col h-[560px] sm:h-[650px] rounded-2xl sm:rounded-3xl border border-zinc-800 bg-zinc-900/40 backdrop-blur-md overflow-hidden shadow-2xl">
               
               {/* Chat Sub-Header */}
-              <div className="px-6 py-3.5 bg-zinc-950/80 border-b border-zinc-800 flex items-center justify-between text-xs font-mono">
-                <div className="flex items-center gap-2 text-zinc-300">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Anti-Hallucination Pipeline Active (Temp: 0.0)</span>
+              <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 bg-zinc-950/90 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs font-mono">
+                <div className="flex items-center gap-1.5 text-zinc-300">
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="truncate">Anti-Hallucination Pipeline (0.0)</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-zinc-400">Active Threshold:</span>
-                  <span className="px-2 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    &ge; {minCosine.toFixed(2)} Cosine
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="text-[10px] text-zinc-400">Umbral:</span>
+                  <span className="px-1.5 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">
+                    &ge; {minCosine.toFixed(2)} Cos
                   </span>
                 </div>
               </div>
 
               {/* Messages Container */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3">
                 {messages.map((m) => (
                   <div
                     key={m.id}
                     className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'}`}
                   >
-                    <div className={`max-w-2xl rounded-2xl p-4 text-xs sm:text-sm leading-relaxed ${
+                    <div className={`max-w-2xl rounded-2xl p-3 sm:p-4 text-xs sm:text-sm leading-relaxed ${
                       m.role === 'user'
                         ? 'bg-indigo-600 text-white shadow-md'
                         : m.text.startsWith('[GUARDRAIL TRIGGERED]')
