@@ -40,5 +40,6 @@ An enterprise-grade Retrieval-Augmented Generation (RAG) engine designed to extr
 - **Database:** PostgreSQL with [pgvector](https://github.com/pgvector/pgvector) extension
 
 <div align="center">
-  <i>Engineered for production by <a href="https://axel.dev">Axel Molineros</a>.</i>
+  <i>Engineered for production by <a href="https://github.com/Axl07s">Axel Molineros</a>.</i>
 </div>
+
