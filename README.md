@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://enterprise-rag-app-plum.vercel.app/projects/rag_01.png" alt="Enterprise RAG Engine" width="100%" />
+  <img src="https://raw.githubusercontent.com/Axl07s/portfolio-axel/master/public/projects/rag_01.png" alt="Enterprise RAG Engine" width="100%" />
 
   # Enterprise RAG Engine
   **Hybrid Semantic Search & Anti-Hallucination Knowledge Base**
@@ -42,4 +42,5 @@ An enterprise-grade Retrieval-Augmented Generation (RAG) engine designed to extr
 <div align="center">
   <i>Engineered for production by <a href="https://github.com/Axl07s">Axel Molineros</a>.</i>
 </div>
+
 
