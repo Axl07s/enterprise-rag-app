@@ -3,6 +3,7 @@ import {
   Send, Database, FileText, Sparkles, ShieldCheck, 
   Cpu, Sliders, Terminal, X, AlertTriangle, RefreshCw, Info
 } from 'lucide-react';
+import { translations, type Language } from './translations';
 
 interface CitationDetails {
   docName: string;
@@ -30,6 +31,23 @@ interface VaultDoc {
 }
 
 export function App() {
+  const [lang, setLangState] = useState<Language>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('rag_lang');
+      if (saved === 'en' || saved === 'es') return saved;
+      return navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en';
+    }
+    return 'en';
+  });
+
+  const setLang = (newLang: Language) => {
+    setLangState(newLang);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('rag_lang', newLang);
+    }
+  };
+
+  const t = translations[lang];
   const [activeTab, setActiveTab] = useState<'chat' | 'vault' | 'guardrails'>('chat');
   const [input, setInput] = useState('');
   const [selectedCitation, setSelectedCitation] = useState<CitationDetails | null>(null);
@@ -221,24 +239,50 @@ export function App() {
               <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center font-bold text-emerald-400 shadow-sm">
                 <Database className="w-4 h-4" />
               </div>
-              <span className="font-extrabold text-base text-white tracking-tight">Enterprise RAG</span>
+              <span className="font-extrabold text-base text-white tracking-tight">{t.appTitle}</span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
-                PGVector 3072-dim
+                {t.badge}
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5 sm:hidden">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-[10px] font-mono text-zinc-400">Live Engine</span>
+            <div className="flex items-center gap-2">
+              {/* Language Switcher */}
+              <div className="flex items-center rounded-full bg-zinc-900 border border-zinc-800 p-0.5 text-[10px] font-mono font-semibold">
+                <button
+                  onClick={() => setLang('en')}
+                  className={`px-2 py-0.5 rounded-full transition-all ${
+                    lang === 'en'
+                      ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  EN
+                </button>
+                <button
+                  onClick={() => setLang('es')}
+                  className={`px-2 py-0.5 rounded-full transition-all ${
+                    lang === 'es'
+                      ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  ES
+                </button>
+              </div>
+
+              <div className="hidden sm:flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] font-mono text-zinc-400">{t.status}</span>
+              </div>
             </div>
           </div>
 
           {/* Navigation Tabs - Compact, sleek & mobile-first */}
           <nav className="w-full sm:w-auto flex items-center gap-1 bg-zinc-900/90 p-1 rounded-xl border border-zinc-800 text-xs font-medium overflow-x-auto no-scrollbar">
             {[
-              { id: 'chat', label: 'Playground' },
-              { id: 'vault', label: 'Bóveda Docs' },
-              { id: 'guardrails', label: 'Guardrails' },
+              { id: 'chat', label: t.tabs.playground },
+              { id: 'vault', label: t.tabs.vault },
+              { id: 'guardrails', label: t.tabs.guardrails },
             ].map(tab => (
               <button
                 key={tab.id}
@@ -271,10 +315,10 @@ export function App() {
               <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 bg-zinc-950/90 border-b border-zinc-800 flex flex-wrap items-center justify-between gap-2 text-[11px] sm:text-xs font-mono">
                 <div className="flex items-center gap-1.5 text-zinc-300">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span className="truncate">Anti-Hallucination Pipeline (0.0)</span>
+                  <span className="truncate">{t.subHeader.antiHallucination}</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="text-[10px] text-zinc-400">Umbral:</span>
+                  <span className="text-[10px] text-zinc-400">{t.subHeader.threshold}</span>
                   <span className="px-1.5 py-0.5 rounded font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[10px]">
                     &ge; {minCosine.toFixed(2)} Cos
                   </span>
@@ -345,7 +389,7 @@ export function App() {
                 >
                   <input
                     type="text"
-                    placeholder="Enter technical query across indexed enterprise documentation..."
+                    placeholder={t.chat.inputPlaceholder}
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     className="flex-1 bg-zinc-900 border border-zinc-800 text-white rounded-xl px-4 py-3 text-xs sm:text-sm focus:outline-none focus:border-emerald-500 transition-colors"
@@ -354,7 +398,7 @@ export function App() {
                     type="submit"
                     className="px-5 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase transition-all flex items-center gap-2 shadow-lg"
                   >
-                    <span>Query</span>
+                    <span>{t.chat.send}</span>
                     <Send className="w-3.5 h-3.5" />
                   </button>
                 </form>
